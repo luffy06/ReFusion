@@ -1,0 +1,6 @@
+[submodule "lib/pytorch-OpCounter"]
+	path = lib/pytorch-OpCounter
+	url = https://github.com/luffy06/pytorch-OpCounter
+[submodule "lib/retriever-lib"]
+	path = lib/retriever-lib
+	url = https://github.com/luffy06/retriever-lib
