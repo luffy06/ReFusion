@@ -469,7 +469,7 @@ def data_collator_retrieval(features: List[Any]) -> Dict[str, Any]:
     if "input_texts" in first and first["input_texts"] is not None:
         batch["input_texts"] = [f["input_texts"] for f in features]
     if "neighbors" in first and first["neighbors"] is not None:
-        batch["neighbors"] = torch.tensor(np.stack([np.concatenate(f["neighbors"], axis=0) for f in features]))
+        batch["neighbors"] = torch.tensor(np.stack([f["neighbors"] for f in features]))
     if "neighbor_texts" in first and first["neighbor_texts"] is not None:
         batch["neighbor_texts"] = []
         for f in features:
@@ -551,16 +551,6 @@ class FewShotDataset(torch.utils.data.Dataset):
 
         logger.info(f"Creating/loading examples from dataset file at {args.data_dir}")
 
-        # lock_path = cached_features_file + ".lock"
-        # with FileLock(lock_path):
-
-        #     if os.path.exists(cached_features_file) and not args.overwrite_cache:
-        #         start = time.time()
-        #         self.query_examples = torch.load(cached_features_file)
-        #         logger.info(
-        #             f"Loading features from cached file {cached_features_file} [took %.3f s]", time.time() - start
-        #         )
-        #     else:
         logger.info(f"Creating features from dataset file at {args.data_dir}")
 
         if mode == "dev":
@@ -570,18 +560,11 @@ class FewShotDataset(torch.utils.data.Dataset):
         else:
             self.query_examples = self.processor.get_train_examples(args.data_dir)
 
-                # start = time.time()
-                # torch.save(self.query_examples, cached_features_file)
-                # # ^ This seems to take a lot of time so I want to investigate why and how we can improve.
-                # logger.info(
-                #     "Saving features into cached file %s [took %.3f s]", cached_features_file, time.time() - start
-                # )
-
         self.num_sample = 1
         # Size is expanded by num_sample
         self.size = len(self.query_examples)
 
-        all_neighbors = []
+        all_neighbor_embs = []
         all_neighbor_texts = []
         if retriever != None:
             step = 2 if self.query_examples[0].text_b != None else 1
@@ -594,15 +577,22 @@ class FewShotDataset(torch.utils.data.Dataset):
                 l = i * batch_size
                 r = np.min(((i + 1) * batch_size, len(self.query_examples)))
                 batch_input_texts = []
-                for j in range(r - l):
-                    input_text_list = input_example_to_tuple(self.query_examples[l + j])
+                for j in range(l, r):
+                    input_text_list = input_example_to_tuple(self.query_examples[j])
                     batch_input_texts += input_text_list
                 
                 query_emb = query_encoder.encode(batch_input_texts, show_progress_bar=False)
-                neighbors, neighbor_texts = retriever.search(query_emb)
+                batch_neighbors = retriever.search(query_emb)
                 for j in range(r - l):
-                    all_neighbors.append(neighbors[j*step:(j+1)*step, :, :])
-                    all_neighbor_texts.append([neighbor_texts[j*step+k] for k in range(step)])
+                    embs = []
+                    texts = []
+                    for k in range(step):
+                        embs.append(batch_neighbors[j*step+k]['emb'])
+                        texts = texts + batch_neighbors[j*step+k]['text']
+                    embs = np.concatenate(embs, axis=1)
+                    all_neighbor_embs.append(embs)
+                    all_neighbor_texts.append(texts)
+            all_neighbor_embs = np.concatenate(all_neighbor_embs, axis=0)
 
         self.features = []
         for i, example in enumerate(self.query_examples):
@@ -613,8 +603,8 @@ class FewShotDataset(torch.utils.data.Dataset):
                 template=args.template,
                 label_word_list=self.label_word_list,
                 verbose=True if i == 0 else False,
-                neighbors=all_neighbors[i] if len(all_neighbors) else None,
-                neighbor_texts=all_neighbor_texts[i] if len(all_neighbors) else None,
+                neighbor_embs=all_neighbor_embs[i] if len(all_neighbor_embs) else None,
+                neighbor_texts=all_neighbor_texts[i] if len(all_neighbor_embs) else None,
             ))
 
     def __len__(self):
@@ -634,7 +624,7 @@ class FewShotDataset(torch.utils.data.Dataset):
         template=None,
         label_word_list=None,
         verbose=False,
-        neighbors=None,
+        neighbor_embs=None,
         neighbor_texts=None,
     ):
         """
@@ -685,7 +675,7 @@ class FewShotDataset(torch.utils.data.Dataset):
             features = EncoderOnlyInputFeatures(
                 **inputs, 
                 label=example_label, 
-                neighbors=neighbors,
+                neighbors=neighbor_embs,
                 neighbor_texts=neighbor_texts,
             )
         elif self.transformer_type == "encoder-decoder":
@@ -706,7 +696,7 @@ class FewShotDataset(torch.utils.data.Dataset):
             )
             features = EncoderDecoderInputFeatures(
                 **inputs,
-                neighbors=neighbors,
+                neighbors=neighbor_embs,
                 neighbor_texts=neighbor_texts,
             )
         else:
@@ -720,9 +710,9 @@ class FewShotDataset(torch.utils.data.Dataset):
             logger.info("label: %s" % example.label)
             logger.info("input texts: \n%s" % self.tokenizer.decode(features.input_ids))
             if neighbor_texts != None:
-                logger.info("neighbors of 1st sentence: \n%s" % '\n'.join([f'Top-{i+1}: {text}'for i, text in enumerate(neighbor_texts[0])]))
+                logger.info("neighbors of 1st sentence: \n%s" % '\n'.join([f'Top-{i+1}: {text}'for i, text in enumerate(neighbor_texts[:len(neighbor_texts)//2])]))
                 if len(neighbor_texts) > 1:
-                    logger.info("neighbors of 2nd sentence: \n%s" % '\n'.join([f'Top-{i+1}: {text}'for i, text in enumerate(neighbor_texts[1])]))
+                    logger.info("neighbors of 2nd sentence: \n%s" % '\n'.join([f'Top-{i+1}: {text}'for i, text in enumerate(neighbor_texts[len(neighbor_texts)//2:])]))
             else:
                 logger.info("No neighbors")
 
