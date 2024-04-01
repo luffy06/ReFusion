@@ -9,14 +9,14 @@
 # MODEL: pre-trained model name (roberta-*, bert-*), see Transformers model list
 
 PROJECT_DIR=$(dirname "$(dirname "$(dirname "$(realpath "$0")")")")
-DEVICE=3 # Cannot support multiple devices
+DEVICE=2 # Cannot support multiple devices
 PORT=2222
 TYPE=prompt
-TASK_LIST=('SST-2' 'sst-5' 'mr' 'cr' 'mpqa' 'subj' 'trec' 'CoLA' 'MNLI' 'SNLI' 'QNLI' 'RTE' 'MRPC' 'QQP') # 'STS-B')
+TASK_LIST=('SST-2') # 'sst-5' 'mr' 'cr' 'mpqa' 'subj' 'trec' 'CoLA' 'MNLI' 'SNLI' 'QNLI' 'RTE' 'MRPC' 'QQP')
 BS=2
 # The initial learning rate for [`AdamW`] optimizer, defaults to 5e-5.
-LR=1e-5
-ARCH_LR=5e-5
+LR=1e-4
+ARCH_LR=1e-4
 # The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in [`AdamW`] optimizer, defaults to 0.
 WEIGHT_DECAY=1e-4
 ARCH_WEIGHT_DECAY=1e-4
@@ -38,7 +38,7 @@ ARCH_LR_SCHEDULER_TYPE="linear"
 # Number of steps used for a linear warmup from 0 to `learning_rate`.
 WARMUP_STEPS=100
 ARCH_WARMUP_STEPS=100
-SEED_LIST=(13 21 42 87 100)
+SEED_LIST=(13) # 21 42 87 100)
 MODEL=/root/autodl-tmp/wsy/models/t5-base
 IFS='/' read -ra ADDR <<< "$MODEL"
 MODEL_NAME=${ADDR[-1]}
@@ -77,66 +77,66 @@ do
         TASK_EXTRA=""
         case $TASK in
             SST-2)
-                TEMPLATE=Does_the_following_sentence_have_a_positive_or_negative_sentiment_?_*sent_0*_The_answer_is.*sep**label*
+                TEMPLATE=Does_the_following_sentence_have_a_positive_or_negative_sentiment_?_*sent_0*_The_answer_is*sep**label**eos*
                 MAPPING="{'0':'negative','1':'positive'}"
                 ;;
             sst-5)
-                TEMPLATE=What_sentiment_does_this_sentence_have?_terrible,_bad,_okay,_good_or_great.*sent_0*_The_answer_is.*sep**label*
+                TEMPLATE=What_sentiment_does_this_sentence_have?_terrible,_bad,_okay,_good_or_great*sent_0*_The_answer_is*sep**label**eos*
                 MAPPING="{0:'terrible',1:'bad',2:'okay',3:'good',4:'great'}"
                 ;;
             mr)
-                TEMPLATE=Does_the_following_sentence_have_a_positive_or_negative_sentiment_?_*sent_0*_The_answer_is.*sep**label*
+                TEMPLATE=Does_the_following_sentence_have_a_positive_or_negative_sentiment_?_*sent_0*_The_answer_is*sep**label**eos*
                 MAPPING="{0:'negative',1:'positive'}"
                 ;;
             cr)
-                TEMPLATE=Does_the_following_sentence_have_a_positive_or_negative_sentiment_?_*sent_0*_The_answer_is.*sep**label*
+                TEMPLATE=Does_the_following_sentence_have_a_positive_or_negative_sentiment_?_*sent_0*_The_answer_is*sep**label**eos*
                 MAPPING="{0:'negative',1:'positive'}"
                 ;;
             mpqa)
-                TEMPLATE=Does_the_following_sentence_have_a_positive_or_negative_sentiment_?_*sent_0*_The_answer_is.*sep**label*
+                TEMPLATE=Does_the_following_sentence_have_a_positive_or_negative_sentiment_?_*sent_0*_The_answer_is*sep**label**eos*
                 MAPPING="{0:'negative',1:'positive'}"
                 ;;
             subj)
-                TEMPLATE=Is_this_a_subjective_or_objective_description_?_*sent_0*_The_answer_is.*sep**label*
+                TEMPLATE=Is_this_a_subjective_or_objective_description_?_*sent_0*_The_answer_is*sep**label**eos*
                 MAPPING="{0:'subjective',1:'objective'}"
                 ;;
             trec)
-                TEMPLATE=Which_category_best_describes_the_following_question:_*sent_0*_Choose_from_the_following_list:_description,_entity,_expression,_person,_location,_quantity._The_answer_is.*sep**label*
+                TEMPLATE=Which_category_best_describes_the_following_question:_*sent_0*_Choose_from_the_following_list:_description,_entity,_expression,_person,_location,_quantity._The_answer_is*sep**label**eos*
                 MAPPING="{0:'description',1:'entity',2:'expression',3:'person',4:'location',5:'quantity'}"
                 ;;
             CoLA)
-                TEMPLATE=The_following_sentence_is_either_"acceptable",_meaning_it_is_grammatically_correct_and_makes_sense,_or_"unacceptable"._Which_is_it?*sent_0*_The_answer_is.*sep**label*
+                TEMPLATE=The_following_sentence_is_either_"acceptable",_meaning_it_is_grammatically_correct_and_makes_sense,_or_"unacceptable"._Which_is_it?*sent_0*_The_answer_is*sep**label**eos*
                 MAPPING="{'0':'unacceptable','1':'acceptable'}"
                 ;;
             MNLI)
-                TEMPLATE=*sent-_0*_?_,*+sentl_1**sep**label*
+                TEMPLATE=*sent-_0*_?,*+sentl_1**sep**label**eos*
                 MAPPING="{'contradiction':'No','entailment':'Yes','neutral':'Maybe'}"
                 TASK_EXTRA="--max_seq_len 256"
                 ;;
             SNLI)
-                TEMPLATE=*sent-_0*_?_,*+sentl_1**sep**label*
+                TEMPLATE=*sent-_0*_?,*+sentl_1**sep**label**eos*
                 MAPPING="{'contradiction':'No','entailment':'Yes','neutral':'Maybe'}"
                 TASK_EXTRA="--max_seq_len 256"
                 ;;
             QNLI)
-                TEMPLATE=*sent-_0*_?_,*+sentl_1**sep**label*
+                TEMPLATE=*sent-_0*_?,*+sentl_1**sep**label**eos*
                 MAPPING="{'not_entailment':'No','entailment':'Yes'}"
                 ;;
             RTE)
-                TEMPLATE=*sent-_0*_?_,*+sentl_1**sep**label*
+                TEMPLATE=*sent-_0*_?,*+sentl_1**sep**label**eos*
                 MAPPING="{'not_entailment':'No','entailment':'Yes'}"
                 TASK_EXTRA="--max_seq_len 256 --first_sent_limit 240"
                 ;;
             MRPC)
-                TEMPLATE=*sent_0*_?_,*+sentl_1**sep**label*
+                TEMPLATE=*sent_0*_?,*+sentl_1**sep**label**eos*
                 MAPPING="{'0':'No','1':'Yes'}"
                 ;;
             QQP)
-                TEMPLATE=*sent_0*_?_,*+sentl_1**sep**label*
+                TEMPLATE=*sent_0*_?,*+sentl_1**sep**label**eos*
                 MAPPING="{'0':'No','1':'Yes'}"
                 ;;
             STS-B)
-                TEMPLATE=*sent_0*_?_,*+sentl_1**sep**label*
+                TEMPLATE=*sent_0*_?,*+sentl_1**sep**label**eos*
                 MAPPING="{'0':'No','1':'Yes'}"
                 ;;
         esac
@@ -164,7 +164,7 @@ do
             --few_shot_type $TYPE \
             --num_k $K \
             --max_seq_length 512 \
-            --max_target_length 1 \
+            --max_target_length 3 \
             --per_device_train_batch_size $BS \
             --per_device_eval_batch_size 16 \
             --gradient_accumulation_steps $GS \
@@ -194,7 +194,7 @@ do
             --enable_retrieval \
             --retrieval_mode nas \
             --target_modules 'k' 'v' \
-            --layers_pattern 'encoder' \
+            --layers_pattern 'encoder\.block\.(\d+)\.*' \
             --encoder_path $ENCODER_PATH \
             --retriever_path $RETRIEVER_PATH \
             --nprobe $NPROBE \

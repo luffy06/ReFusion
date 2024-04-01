@@ -319,18 +319,19 @@ class RetrievalWrapper(nn.Module):
             is_using_layer_indexes = getattr(config, "layers_to_transform", None) is not None
             layer_indexing_pattern = getattr(config, "layers_pattern", None)
 
-            if is_using_layer_indexes and target_module_found:
+            if target_module_found:
                 layers_pattern = COMMON_LAYERS_PATTERN if layer_indexing_pattern is None else layer_indexing_pattern
                 layers_pattern = [layers_pattern] if isinstance(layers_pattern, str) else layers_pattern
 
                 for pattern in layers_pattern:
-                    layer_index = re.match(f".*.{pattern}\.(\d+)\.*", key)
+                    layer_index = re.match(pattern, key)
                     if layer_index is not None:
                         layer_index = int(layer_index.group(1))
-                        if isinstance(config.layers_to_transform, int):
-                            target_module_found = layer_index == config.layers_to_transform
-                        else:
-                            target_module_found = layer_index in config.layers_to_transform
+                        if is_using_layer_indexes:
+                            if isinstance(config.layers_to_transform, int):
+                                target_module_found = layer_index == config.layers_to_transform
+                            else:
+                                target_module_found = layer_index in config.layers_to_transform
                         break
                     else:
                         target_module_found = False

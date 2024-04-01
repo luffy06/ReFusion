@@ -305,7 +305,7 @@ def tokenize_input_encoder_decoder(
         )
 
     def dec(ids):
-        return tokenizer.decode(ids)
+        return tokenizer.decode(ids, skip_special_tokens=True)
 
     input_ids = []
     attention_mask = []
@@ -347,6 +347,8 @@ def tokenize_input_encoder_decoder(
                 new_texts += part
             elif part == 'sep':
                 gen_input_ids = False
+            elif part == 'eos':
+                new_texts += tokenizer.eos_token
             elif part == 'label':
                 new_texts += dec(label_id)
             elif part[:5] == 'sent_':
