@@ -12,11 +12,11 @@ PROJECT_DIR=$(dirname "$(dirname "$(dirname "$(realpath "$0")")")")
 DEVICE=3 # Cannot support multiple devices
 PORT=2222
 TYPE=prompt
-TASK_LIST=('SST-2') # 'sst-5' 'mr' 'cr' 'mpqa' 'subj' 'trec' 'CoLA' 'MNLI' 'SNLI' 'QNLI' 'RTE' 'MRPC' 'QQP')
+TASK_LIST=('SST-2') # 'sst-5' 'mr' 'cr' 'mpqa' 'subj' 'trec' 'CoLA' 'MNLI' 'SNLI' 'QNLI' 'RTE' 'MRPC' 'QQP') # 'STS-B')
 BS=2
 # The initial learning rate for [`AdamW`] optimizer, defaults to 5e-5.
 LR=1e-4
-ARCH_LR=1e-4
+ARCH_LR=2e-4
 # The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in [`AdamW`] optimizer, defaults to 0.
 WEIGHT_DECAY=1e-4
 ARCH_WEIGHT_DECAY=1e-4
@@ -39,13 +39,13 @@ ARCH_LR_SCHEDULER_TYPE="linear"
 WARMUP_STEPS=100
 ARCH_WARMUP_STEPS=100
 SEED_LIST=(13) # 21 42 87 100)
-MODEL=/root/autodl-tmp/wsy/models/t5-base
+MODEL=/root/autodl-tmp/wsy/models/gemma-2b
 IFS='/' read -ra ADDR <<< "$MODEL"
 MODEL_NAME=${ADDR[-1]}
 
 # Retrieval variables
 RETRIEVER_DEVICE=-1
-RETRIEVER_PATH=/root/autodl-tmp/wsy/retriever-lib/metadata/wikitext-103-all-bert-large-uncased-bert-base-uncased
+RETRIEVER_PATH=/root/autodl-tmp/wsy/retriever-lib/metadata/wikitext-103-all-bert-large-uncased-gemma-2b
 ENCODER_PATH=/root/autodl-tmp/wsy/models/bert-large-uncased
 NPROBE=512
 TOPK=64
@@ -81,7 +81,7 @@ do
                 MAPPING="{'0':'negative','1':'positive'}"
                 ;;
             sst-5)
-                TEMPLATE=What_sentiment_does_this_sentence_have?_terrible,_bad,_okay,_good_or_great*sent_0*_The_answer_is*sep**label**eos*
+                TEMPLATE=What_sentiment_does_this_sentence_have?_terrible,_bad,_okay,_good_or_great.*sent_0*_The_answer_is*sep**label**eos*
                 MAPPING="{0:'terrible',1:'bad',2:'okay',3:'good',4:'great'}"
                 ;;
             mr)
@@ -109,34 +109,34 @@ do
                 MAPPING="{'0':'unacceptable','1':'acceptable'}"
                 ;;
             MNLI)
-                TEMPLATE=*sent-_0*_?,*+sentl_1**sep**label**eos*
+                TEMPLATE=*sent-_0*_?_,*+sentl_1**sep**label**eos*
                 MAPPING="{'contradiction':'No','entailment':'Yes','neutral':'Maybe'}"
                 TASK_EXTRA="--max_seq_len 256"
                 ;;
             SNLI)
-                TEMPLATE=*sent-_0*_?,*+sentl_1**sep**label**eos*
+                TEMPLATE=*sent-_0*_?_,*+sentl_1**sep**label**eos*
                 MAPPING="{'contradiction':'No','entailment':'Yes','neutral':'Maybe'}"
                 TASK_EXTRA="--max_seq_len 256"
                 ;;
             QNLI)
-                TEMPLATE=*sent-_0*_?,*+sentl_1**sep**label**eos*
+                TEMPLATE=*sent-_0*_?_,*+sentl_1**sep**label**eos*
                 MAPPING="{'not_entailment':'No','entailment':'Yes'}"
                 ;;
             RTE)
-                TEMPLATE=*sent-_0*_?,*+sentl_1**sep**label**eos*
+                TEMPLATE=*sent-_0*_?_,*+sentl_1**sep**label**eos*
                 MAPPING="{'not_entailment':'No','entailment':'Yes'}"
                 TASK_EXTRA="--max_seq_len 256 --first_sent_limit 240"
                 ;;
             MRPC)
-                TEMPLATE=*sent_0*_?,*+sentl_1**sep**label**eos*
+                TEMPLATE=*sent_0*_?_,*+sentl_1**sep**label**eos*
                 MAPPING="{'0':'No','1':'Yes'}"
                 ;;
             QQP)
-                TEMPLATE=*sent_0*_?,*+sentl_1**sep**label**eos*
+                TEMPLATE=*sent_0*_?_,*+sentl_1**sep**label**eos*
                 MAPPING="{'0':'No','1':'Yes'}"
                 ;;
             STS-B)
-                TEMPLATE=*sent_0*_?,*+sentl_1**sep**label**eos*
+                TEMPLATE=*sent_0*_?_,*+sentl_1**sep**label**eos*
                 MAPPING="{'0':'No','1':'Yes'}"
                 ;;
         esac
@@ -152,7 +152,7 @@ do
 
         CUDA_VISIBLE_DEVICES=$DEVICE python -m torch.distributed.launch \
             --nproc_per_node=1 \
-            --master_port $PORT $PROJECT_DIR/src/run_glue_encoder_decoder.py \
+            --master_port $PORT $PROJECT_DIR/src/run_glue_decoder.py \
             --task_name $TASK \
             --data_dir $DATA_DIR \
             --overwrite_output_dir \
@@ -193,8 +193,8 @@ do
             --mapping $MAPPING \
             --enable_retrieval \
             --retrieval_mode nas \
-            --target_modules 'k' 'v' \
-            --layers_pattern 'encoder\.block\.(\d+)\.*' \
+            --target_modules 'k_proj' 'v_proj' \
+            --layers_pattern 'model\.layers\.(\d+)\.*' \
             --encoder_path $ENCODER_PATH \
             --retriever_path $RETRIEVER_PATH \
             --nprobe $NPROBE \

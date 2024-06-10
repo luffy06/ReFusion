@@ -38,7 +38,7 @@ from datetime import datetime
 from util.hooks import compute_flops
 
 sys.path.append("/root/autodl-tmp/wsy/ReFusion/lib/retriever-lib/src/faisslib")
-from retriever import Retriever
+from retriever import FaissRetriever
 from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
@@ -171,7 +171,7 @@ def main():
         assert retrieval_args.retrieval_mode != None
         logger.info("Enable Retrievals")
         logger.info(f"{retrieval_args}")
-        retriever = Retriever(
+        retriever = FaissRetriever(
             retrieval_args.retriever_path, 
             retrieval_args.nprobe, 
             retrieval_args.topk,

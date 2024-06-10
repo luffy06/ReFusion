@@ -60,6 +60,24 @@ class EncoderDecoderInputFeatures(InputFeatures):
         """Serializes this instance to a JSON string."""
         return json.dumps(dataclasses.asdict(self)) + "\n"
 
+@dataclass(frozen=True)
+class DecoderOnlyInputFeatures(InputFeatures):
+    """
+    Inherit from Transformers' InputFeatuers.
+    """
+
+    input_ids: List[int]
+    input_texts: Optional[List[str]] = None
+    attention_mask: Optional[List[int]] = None
+    labels: Optional[List[int]] = None
+    label_texts: Optional[List[str]] = None
+    neighbors: np.array = None
+    neighbor_texts: Optional[List[str]] = None
+
+    def to_json_string(self):
+        """Serializes this instance to a JSON string."""
+        return json.dumps(dataclasses.asdict(self)) + "\n"
+
 def input_example_to_string(example, sep_token): 
     if example.text_b is None:
         return example.text_a
@@ -449,6 +467,172 @@ def tokenize_input_encoder_decoder(
 
     return result
 
+def tokenize_input_decoder_only(
+    input_text_list, 
+    label_id, 
+    max_length, 
+    tokenizer, 
+    task_name=None, 
+    prompt=False, 
+    template=None,
+    label_word_list=None, 
+    first_sent_limit=None,
+    other_sent_limit=None,
+    truncate_head=False,
+    ref_text_list=None,
+    return_texts=False
+):
+    def enc(text, max_length=-1):
+        return tokenizer.encode(
+            text, 
+            max_length=max_length if max_length > 0 else None,
+            padding='max_length',
+            add_special_tokens=False, 
+            truncation=True if max_length > 0 else False,
+        )
+
+    def dec(ids):
+        return tokenizer.decode([ids] if type(ids) is int else ids, skip_special_tokens=True)
+
+    input_ids = []
+    attention_mask = []
+    label_ids = []
+    source_text = ''
+    target_text = ''
+
+    if prompt:
+        """
+        Concatenate all sentences and prompts based on the provided template.
+        Template example:'*sent_0* It was*<extra_id_0>*.*sep**<extra_id_0>**label**<extra_id_1>*'
+        *xx* represent variables:
+            *<extra_id_i>*: the mask token in T5
+            *sent_i*: sentence i (input_text_list[i])
+            *sent-_i*: same as above, but delete the last token
+            *sentl_i*: same as above, but use lower case for the first word
+            *sentl-_i*: same as above, but use lower case for the first word and delete the last token
+            *+sent_i*: same as above, but add a space before the sentence
+            *+sentl_i*: same as above, but add a space before the sentence and use lower case for the first word
+            *ref_i*: retrieval i (ref_text_list[i])
+            *ref-_i*: same as above, but delete the last token
+            *refl_i*: same as abovez, but use lower case for the first word
+            *refl-_i*: same as above, but use lower case for the first word and delete the last token
+            *+ref_i*: same as above, but add a space before the retrieval
+            *+refl_i*: same as above, but add a space before the retrieval and use lower case for the first word
+
+        Use "_" to replace space.
+        PAY ATTENTION TO SPACE!! DO NOT leave space before variables, for this will lead to extra space token.
+        """
+        assert template is not None
+        
+        template_list = template.split('*') # Get variable list in the template
+        gen_input_ids = True
+
+        for part_id, part in enumerate(template_list):
+            new_texts = ''
+            if part.startswith('<extra_id_'):
+                new_texts += part
+            elif part == 'sep':
+                gen_input_ids = False
+            elif part == 'eos':
+                new_texts += tokenizer.eos_token
+            elif part == 'label':
+                new_texts += dec(label_id)
+            elif part[:5] == 'sent_':
+                sent_id = int(part.split('_')[1])
+                new_texts += input_text_list[sent_id]
+            elif part[:6] == '+sent_':
+                # Add space
+                sent_id = int(part.split('_')[1])
+                new_texts += ' ' + input_text_list[sent_id]
+            elif part[:6] == 'sent-_':
+                # Delete the last token
+                sent_id = int(part.split('_')[1])
+                new_texts += input_text_list[sent_id][:-1]
+            elif part[:6] == 'sentl_':
+                # Lower case the first token
+                sent_id = int(part.split('_')[1])
+                text = input_text_list[sent_id]
+                text = text[:1].lower() + text[1:]
+                new_texts += text
+            elif part[:7] == '+sentl_':
+                # Lower case the first token and add space 
+                sent_id = int(part.split('_')[1])
+                text = input_text_list[sent_id]
+                text = text[:1].lower() + text[1:]
+                new_texts += ' ' + text
+            elif part[:7] == 'sentl-_':
+                # Lower case the first token and discard the last token
+                sent_id = int(part.split('_')[1])
+                text = input_text_list[sent_id]
+                text = text[:1].lower() + text[1:]
+                new_texts += text[:-1]
+            elif part[:6] == 'sentu_':
+                # Upper case the first token
+                sent_id = int(part.split('_')[1])
+                text = input_text_list[sent_id]
+                text = text[:1].upper() + text[1:]
+                new_texts += text
+            elif part[:7] == '+sentu_':
+                # Upper case the first token and add space
+                sent_id = int(part.split('_')[1])
+                text = input_text_list[sent_id]
+                text = text[:1].upper() + text[1:]
+                new_texts += ' ' + text
+            elif part[:4] == 'ref_':
+                ref_id = int(part.split('_')[1])
+                new_texts += ' '.join(ref_text_list[ref_id])
+            else:
+                # Just natural language prompt
+                part = part.replace('_', ' ') 
+                new_texts += part
+
+            if part[:4] == 'sent' or part[1:5] == 'sent':
+                # If this part is the sentence, limit the sentence length
+                sent_id = int(part.split('_')[1])
+                if sent_id == 0:
+                    if first_sent_limit is not None:
+                        new_texts = new_texts[:first_sent_limit]
+                else:
+                    if other_sent_limit is not None:
+                        new_texts = new_texts[:other_sent_limit]
+
+            if gen_input_ids:
+                source_text += new_texts
+            else:
+                target_text += new_texts
+    else:
+        """
+        Treat the problem as a translation problem.
+            The input sentences are source texts;
+            The labels are target texts;
+            We use the encoder-decoder models to learn the translation 
+            between source texts and target texts.
+        """
+        source_text = ' '.join(input_text_list)
+        target_text = dec(label_id)
+
+    input_ids = enc(source_text, max_length=max_length)
+    label_ids = enc(target_text)
+    attention_mask += [1 if input_ids[i] != tokenizer.pad_token_id else 0 for i in range(len(input_ids))]
+
+    # Padding
+    if first_sent_limit is not None and len(input_ids) > max_length:
+        # If using sentence limit, the total length still exceeds the maximum limit, report a warning
+        logger.warn("Input exceeds max_length limit: {}".format(tokenizer.decode(input_ids)))
+
+
+    result = {
+        'input_ids': input_ids, 
+        'attention_mask': attention_mask, 
+        'labels': label_ids,
+    }
+
+    if return_texts:
+        result['input_texts'] = ' '.join(input_text_list)
+        result['label_texts'] = dec(label_ids)
+
+    return result
+
 def data_collator_retrieval(features: List[Any]) -> Dict[str, Any]:
     if not isinstance(features[0], Mapping):
         features = [vars(f) for f in features]
@@ -697,6 +881,27 @@ class FewShotDataset(torch.utils.data.Dataset):
                 return_texts=self.args.return_texts,
             )
             features = EncoderDecoderInputFeatures(
+                **inputs,
+                neighbors=neighbor_embs,
+                neighbor_texts=neighbor_texts,
+            )
+        elif self.transformer_type == "decoder-only":
+            inputs = tokenize_input_decoder_only(
+                input_text_list=input_text_list,
+                label_id=label_word_id,
+                max_length=max_length,
+                tokenizer=self.tokenizer,
+                task_name=self.args.task_name,
+                prompt=prompt,
+                template=template,
+                label_word_list=label_word_list,
+                first_sent_limit=self.args.first_sent_limit,
+                other_sent_limit=self.args.other_sent_limit,
+                truncate_head=self.args.truncate_head,
+                ref_text_list=neighbor_texts,
+                return_texts=self.args.return_texts,
+            )
+            features = DecoderOnlyInputFeatures(
                 **inputs,
                 neighbors=neighbor_embs,
                 neighbor_texts=neighbor_texts,

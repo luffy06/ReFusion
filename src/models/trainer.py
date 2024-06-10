@@ -33,7 +33,7 @@ from torch.utils.data.distributed import DistributedSampler
 
 import transformers
 from transformers import EvalPrediction
-from transformers.file_utils import is_datasets_available, is_in_notebook, is_torch_tpu_available
+from transformers.file_utils import is_datasets_available, is_in_notebook
 from transformers.integrations import (
     is_comet_available,
     is_optuna_available,
@@ -84,11 +84,6 @@ else:
 
 if is_datasets_available():
     import datasets
-
-if is_torch_tpu_available():
-    import torch_xla.core.xla_model as xm
-    import torch_xla.debug.metrics as met
-    import torch_xla.distributed.parallel_loader as pl
 
 if is_tensorboard_available():
     from transformers.integrations import TensorBoardCallback
@@ -256,14 +251,11 @@ class Trainer(transformers.Trainer):
             )
 
         # Train
-        if transformers.is_torch_tpu_available():
-            total_train_batch_size = self.args.train_batch_size * xm.xrt_world_size()
-        else:
-            total_train_batch_size = (
-                self.args.train_batch_size
-                * self.args.gradient_accumulation_steps
-                * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1)
-            )
+        total_train_batch_size = (
+            self.args.train_batch_size
+            * self.args.gradient_accumulation_steps
+            * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1)
+        )
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", self.num_examples(train_dataloader))
         logger.info("  Num Epochs = %d", num_train_epochs)
@@ -304,13 +296,7 @@ class Trainer(transformers.Trainer):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
 
-            if transformers.is_torch_tpu_available():
-                parallel_loader = pl.ParallelLoader(train_dataloader, [self.args.device]).per_device_loader(
-                    self.args.device
-                )
-                epoch_iterator = tqdm(parallel_loader, desc="Iteration", disable=not self.is_local_process_zero())
-            else:
-                epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=True)
+            epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=True)
 
             # Reset the past mems state at the beginning of each epoch if necessary.
             if self.args.past_index >= 0:
@@ -338,9 +324,7 @@ class Trainer(transformers.Trainer):
                     else:
                         norm = torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
 
-                    if transformers.is_torch_tpu_available():
-                        xm.optimizer_step(optimizer)
-                    elif self.args.fp16 and _use_native_amp:
+                    if self.args.fp16 and _use_native_amp:
                         self.scaler.step(optimizer)
                         self.scaler.update()
                     else:

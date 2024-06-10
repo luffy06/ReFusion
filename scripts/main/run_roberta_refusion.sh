@@ -9,10 +9,10 @@
 # MODEL: pre-trained model name (roberta-*, bert-*), see Transformers model list
 
 PROJECT_DIR=$(dirname "$(dirname "$(dirname "$(realpath "$0")")")")
-DEVICE=0,1
+DEVICE=0,3
 PORT=7777
 TYPE=prompt
-TASK_LIST=('SST-2' 'sst-5' 'mr' 'cr' 'mpqa' 'subj' 'trec' 'CoLA' 'MNLI' 'SNLI' 'QNLI' 'RTE' 'MRPC' 'QQP')
+TASK_LIST=('MRPC') # 'SST-2' 'sst-5' 'mr' 'cr' 'mpqa' 'subj' 'trec' 'CoLA' 'MNLI' 'SNLI' 'QNLI' 'RTE' 'MRPC' 'QQP')
 BS=32
 # The initial learning rate for [`AdamW`] optimizer, defaults to 5e-5.
 LR=1e-5
@@ -38,7 +38,7 @@ ARCH_LR_SCHEDULER_TYPE="linear"
 # Number of steps used for a linear warmup from 0 to `learning_rate`.
 WARMUP_STEPS=100
 ARCH_WARMUP_STEPS=100
-SEED_LIST=(13 21 42 87 100)
+SEED_LIST=(13) # 21 42 87 100)
 MODEL=/root/autodl-tmp/wsy/models/roberta-large
 IFS='/' read -ra ADDR <<< "$MODEL"
 MODEL_NAME=${ADDR[-1]}
@@ -54,7 +54,7 @@ TOPK=64
 K=16
 
 # Training steps
-MAX_STEP=200
+MAX_STEP=10
 
 # Validation steps
 EVAL_STEP=200
@@ -200,6 +200,7 @@ do
             --mapping $MAPPING \
             --enable_retrieval \
             --retrieval_mode nas \
+            --layers_pattern 'roberta.encoder\.layer\.(\d+)\.*' \
             --target_modules 'key' 'value' \
             --encoder_path $ENCODER_PATH \
             --retriever_path $RETRIEVER_PATH \

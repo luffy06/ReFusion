@@ -19,11 +19,13 @@ from transformers import AdamW, get_linear_schedule_with_warmup
 
 from transformers import (RobertaConfig, RobertaModel, RobertaTokenizer,
                           BartConfig, BartForConditionalGeneration, BartTokenizer,
-                          T5Config, T5ForConditionalGeneration, T5Tokenizer)
+                          T5Config, T5ForConditionalGeneration, T5Tokenizer,
+                          GemmaConfig, GemmaForCausalLM, GemmaTokenizer)
 MODEL_CLASSES = {'roberta': (RobertaConfig, RobertaModel, RobertaTokenizer),
                  't5': (T5Config, T5ForConditionalGeneration, T5Tokenizer),
                  'codet5': (T5Config, T5ForConditionalGeneration, RobertaTokenizer),
-                 'bart': (BartConfig, BartForConditionalGeneration, BartTokenizer)}
+                 'bart': (BartConfig, BartForConditionalGeneration, BartTokenizer),
+                 'gemma': (GemmaConfig, GemmaForCausalLM, GemmaTokenizer)} 
 
 from data.dataset import FewShotDataset, data_collator_retrieval
 from data.processors import (
@@ -33,7 +35,7 @@ from data.processors import (
     compute_metrics_mapping, 
     bound_mapping
 )
-from models.t5 import RetrievalAugmentedT5
+from models.gemma import RetrievalAugmentedGemma
 
 sys.path.append("/root/autodl-tmp/wsy/ReFusion/lib/retriever-lib/src/faisslib")
 from retriever import FaissRetriever
@@ -44,7 +46,8 @@ logger = logging.getLogger(__name__)
 transformer_type_mapping = {
     'roberta': 'encoder-only',
     't5': 'encoder-decoder',
-    'llama': 'decoder-only'
+    'llama': 'decoder-only',
+    'gemma': 'decoder-only'
 }
 
 
@@ -55,7 +58,7 @@ def train(training_args, retrieval_args, train_dataloader, model, optimizer, sch
         batch = {k: v.to(training_args.device) if hasattr(v, "to") else v for k, v in batch.items()}
         source_ids, target_ids = batch["input_ids"], batch["labels"]
         source_mask = batch["attention_mask"]
-        target_mask = batch["decoder_attention_mask"]
+        target_mask = batch["decoder_attention_mask"] if "decoder_attention_mask" in batch else None
 
         if retrieval_args.enable_retrieval:
             outputs = model(
@@ -104,13 +107,11 @@ def train_nas(training_args, train_dataloader, eval_dataloader, model, optimizer
             eval_batch = {k: v.to(training_args.device) if hasattr(v, "to") else v for k, v in eval_batch.items()}
             eval_source_ids, eval_target_ids = eval_batch["input_ids"], eval_batch["labels"]
             eval_source_mask = eval_batch["attention_mask"]
-            eval_target_mask = eval_batch["decoder_attention_mask"]
             
             eval_outputs = model(
                 input_ids=eval_source_ids, 
                 attention_mask=eval_source_mask,
                 labels=eval_target_ids, 
-                decoder_attention_mask=eval_target_mask,
                 neighbors=eval_batch["neighbors"],
                 neighbor_texts=eval_batch["neighbor_texts"],
             )
@@ -127,13 +128,11 @@ def train_nas(training_args, train_dataloader, eval_dataloader, model, optimizer
         batch = {k: v.to(training_args.device) if hasattr(v, "to") else v for k, v in batch.items()}
         source_ids, target_ids = batch["input_ids"], batch["labels"]
         source_mask = batch["attention_mask"]
-        target_mask = batch["decoder_attention_mask"]
 
         outputs = model(
             input_ids=source_ids, 
             attention_mask=source_mask,
             labels=target_ids, 
-            decoder_attention_mask=target_mask,
             neighbors=batch["neighbors"],
             neighbor_texts=batch["neighbor_texts"]
         )
@@ -378,27 +377,27 @@ def main():
         retriever = None
         query_encoder = None
 
-    config = T5Config.from_pretrained(
+    config = GemmaConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
         finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
     )
-    tokenizer = T5Tokenizer.from_pretrained(
+    tokenizer = GemmaTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         use_fast=False,
         cache_dir=model_args.cache_dir,
     )
     if 'prompt' in model_args.few_shot_type:
         if not retrieval_args.enable_retrieval:
-            model = T5ForConditionalGeneration.from_pretrained(
+            model = GemmaForCausalLM.from_pretrained(
                 model_args.model_name_or_path,
                 from_tf=bool(".ckpt" in model_args.model_name_or_path),
                 config=config,
                 cache_dir=model_args.cache_dir,
             )
         else:
-            model = RetrievalAugmentedT5.from_pretrained(
+            model = RetrievalAugmentedGemma.from_pretrained(
                 model_args.model_name_or_path,
                 from_tf=bool(".ckpt" in model_args.model_name_or_path),
                 config=config,
