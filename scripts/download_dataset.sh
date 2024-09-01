@@ -1,4 +1,4 @@
-PROJECT_DIR=$(dirname "$(dirname "$(realpath "$0")")")
+PROJECT_DIR=$(git rev-parse --show-toplevel)
 DATASET_DIR=$PROJECT_DIR/dataset
 PY_DIR=$PROJECT_DIR/src/data
 

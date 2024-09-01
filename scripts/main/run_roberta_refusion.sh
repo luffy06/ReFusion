@@ -8,11 +8,11 @@
 # SEED: random seed (13 / 21 / 42 / 87 / 100)
 # MODEL: pre-trained model name (roberta-*, bert-*), see Transformers model list
 
-PROJECT_DIR=$(dirname "$(dirname "$(dirname "$(realpath "$0")")")")
+PROJECT_DIR=$(git rev-parse --show-toplevel)
 DEVICE=0,1
 PORT=7777
 TYPE=prompt
-TASK_LIST=('SST-2' 'sst-5' 'mr' 'cr' 'mpqa' 'subj' 'trec' 'CoLA' 'MNLI' 'SNLI' 'QNLI' 'RTE' 'MRPC' 'QQP')
+TASK_LIST=('SST-2') # 'sst-5' 'mr' 'cr' 'mpqa' 'subj' 'trec' 'CoLA' 'MNLI' 'SNLI' 'QNLI' 'RTE' 'MRPC' 'QQP')
 BS=32
 # The initial learning rate for [`AdamW`] optimizer, defaults to 5e-5.
 LR=1e-5
@@ -39,14 +39,14 @@ ARCH_LR_SCHEDULER_TYPE="linear"
 WARMUP_STEPS=100
 ARCH_WARMUP_STEPS=100
 SEED_LIST=(13 21 42 87 100)
-MODEL=/root/autodl-tmp/wsy/models/roberta-large
+MODEL=/fsx/hyperpod-input-datasets/AROA6GBMFKRI2VWQAUGYI:Shangyu.Wu@mbzuai.ac.ae/models/roberta-large
 IFS='/' read -ra ADDR <<< "$MODEL"
 MODEL_NAME=${ADDR[-1]}
 
 # Retrieval variables
 RETRIEVER_DEVICE=-1
-RETRIEVER_PATH=/root/autodl-tmp/wsy/retriever-lib/metadata/wikitext-103-all-bert-large-uncased
-ENCODER_PATH=/root/autodl-tmp/wsy/models/bert-large-uncased
+RETRIEVER_PATH=lib/retriever-lib/metadata/wikitext-103-all-bert-large-uncased
+ENCODER_PATH=$PROJECT_DIR/../models/bert-large-uncased
 NPROBE=512
 TOPK=64
 
